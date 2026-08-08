@@ -5,8 +5,8 @@
  */
 
 import "./cli";
-import "./updater";
 import "./ipc";
+import "./updater";
 import "./userAssets";
 import "./vesktopProtocol";
 
@@ -68,6 +68,19 @@ function init() {
     if (process.platform === "win32") {
         disabledFeatures.add("CalculateNativeWinOcclusion");
     }
+
+    // --- FORCE NVENC HARDWARE ENCODER & DISABLE QUALITY SCALER ---
+    app.commandLine.appendSwitch(
+        "enable-features",
+        "AcceleratedVideoEncoder,VaapiVideoEncoder,VaapiOnNvidiaGPUs,VaapiIgnoreDriverChecks,VaapiVideoDecoder,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,WebRtcPipeWireCapturer"
+    );
+    app.commandLine.appendSwitch("ignore-gpu-blocklist");
+    app.commandLine.appendSwitch("disable-gpu-driver-bug-workarounds");
+    app.commandLine.appendSwitch("disable-gpu-sandbox");
+    // app.commandLine.appendSwitch("no-sandbox");
+    // Disable WebRTC's internal C++ QualityScaler
+    app.commandLine.appendSwitch("force-fieldtrials", "WebRTC-VideoQualityScaler/Disabled/");
+    app.commandLine.appendSwitch("disable-features", "WebRtcVideoQualityMonitoring");
 
     // work around chrome 66 disabling autoplay by default
     app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");

@@ -100,7 +100,7 @@ addPatch({
         Object.assign(opts, {
             bitrateMin: 500000,
             bitrateMax: 8000000,
-            bitrateTarget: 600000
+            bitrateTarget: 6000000
         });
         if (opts?.encode) {
             Object.assign(opts.encode, {
@@ -719,8 +719,8 @@ function ModalComponent({
         includeSources: "None"
     });
     const qualitySettings = (useVesktopState().screenshareQuality ??= {
-        resolution: "720",
-        frameRate: "30"
+        resolution: "1080",
+        frameRate: "60"
     });
 
     return (
@@ -778,18 +778,36 @@ function ModalComponent({
                                 // @ts-expect-error incorrect type
                                 const track = conn.input.stream.getVideoTracks()[0];
 
+                                // --- ULTRAWIDE SUPPORT ---
+                                const nativeSettings = track.getSettings();
+                                const nativeWidth = nativeSettings.width || 1920;
+                                const nativeHeight = nativeSettings.height || 1080;
+                                const aspectRatio = nativeWidth / nativeHeight;
+
+                                const targetHeight = Number(qualitySettings.resolution);
+                                const targetWidth = Math.round(targetHeight * aspectRatio);
+                                const targetFrameRate = Number(qualitySettings.frameRate);
+                                // -------------------------
+
+                                // FIX: Update Discord's internal UI state
+                                if (conn.videoStreamParameters?.[0]) {
+                                    conn.videoStreamParameters[0].maxFrameRate = targetFrameRate;
+                                    conn.videoStreamParameters[0].maxResolution ??= { width: 0, height: 0 };
+                                    conn.videoStreamParameters[0].maxResolution.height = targetHeight;
+                                    conn.videoStreamParameters[0].maxResolution.width = targetWidth;
+                                }
+
                                 const constraints = {
                                     ...track.getConstraints(),
-                                    frameRate: { min: frameRate, ideal: frameRate },
-                                    width: { min: 640, ideal: width, max: width },
-                                    height: { min: 480, ideal: height, max: height },
-                                    advanced: [{ width: width, height: height }],
+                                    frameRate: { min: targetFrameRate, ideal: targetFrameRate, max: targetFrameRate },
+                                    width: { min: targetWidth, ideal: targetWidth, max: targetWidth },
+                                    height: { min: targetHeight, ideal: targetHeight, max: targetHeight },
+                                    advanced: [{ width: targetWidth, height: targetHeight }],
                                     resizeMode: "none"
                                 };
 
                                 try {
                                     await track.applyConstraints(constraints);
-
                                     logger.info(
                                         "Applied constraints successfully. New constraints:",
                                         track.getConstraints()
@@ -797,7 +815,22 @@ function ModalComponent({
                                 } catch (e) {
                                     logger.error("Failed to apply constraints.", e);
                                 }
-                            }, 100);
+
+                                // --- NEW: FORCE RTC PARAMETERS ON INITIAL START ---
+                                const sender = (track as any).__vencordSender;
+                                if (sender) {
+                                    try {
+                                        const params = sender.getParameters();
+                                        if (!params.encodings) params.encodings = [{}];
+                                        params.encodings[0].scaleResolutionDownBy = 1;
+                                        params.encodings[0].maxBitrate = 8000000;
+                                        await sender.setParameters(params);
+                                        logger.info("Forced initial RTC parameters to 8Mbps / no downscale.");
+                                    } catch (e) {
+                                        logger.error("Failed to force initial RTC parameters.", e);
+                                    }
+                                }
+                            }, 496);
                         } catch (error) {
                             logger.error("Error while submitting stream.", error);
                         }
