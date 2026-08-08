@@ -25,32 +25,17 @@ if (isLinux) {
     }
 
     navigator.mediaDevices.getDisplayMedia = async function (opts) {
-        // 1. Get the target resolution/framerate FIRST
-        const frameRate = Number(State.store.screenshareQuality?.frameRate ?? 60);
-        const height = Number(State.store.screenshareQuality?.resolution ?? 1080);
-        const width = Math.round(height * (16 / 9));
-
-        // 2. FORCE OPTS BEFORE CAPTURE
-        // This forces Discord's internal UI badge to read the correct resolution instantly
-        if (opts && !opts.video) opts.video = true;
-        if (typeof opts?.video !== "object" && opts) opts.video = {};
-        if (opts && opts.video && typeof opts.video === "object") {
-            opts.video = {
-                ...opts.video,
-                width: { min: width, ideal: width, max: width },
-                height: { min: height, ideal: height, max: height },
-                frameRate: { min: frameRate, ideal: frameRate, max: frameRate }
-            };
-        }
-
-        // 3. Now capture the stream with the forced opts
         const stream = await original.call(this, opts);
         const id = await getVirtmic();
 
+        const frameRate = Number(State.store.screenshareQuality?.frameRate ?? 60);
+        const height = Number(State.store.screenshareQuality?.resolution ?? 1080);
+        const width = Math.round(height * (16 / 9));
         const track = stream.getVideoTracks()[0];
+
         track.contentHint = String(currentSettings?.contentHint);
 
-        // 4. Lock the constraints again after capture (just to be safe)
+        // LOCKED CONSTRAINTS: min == ideal == max. WebRTC cannot downscale.
         const constraints = {
             ...track.getConstraints(),
             frameRate: { min: frameRate, ideal: frameRate, max: frameRate },
